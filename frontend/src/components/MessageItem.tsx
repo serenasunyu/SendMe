@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, IconButton, Card, CardContent, CardMedia, useTheme } from '@mui/material';
 import { FileCopy, GetApp } from '@mui/icons-material';
-import { Message, File } from '../types';
+import { Message, File } from '../types/types';
 
 interface MessageItemProps {
     message: Message;

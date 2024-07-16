@@ -1,4 +1,4 @@
-import { Message, File } from '../types';
+import { Message, File } from '../types/types';
 
 const fakeFiles: File[] = [
   { name: 'demo-Saul.jpg', url: 'https://media.istockphoto.com/id/1939608350/photo/happy-mature-latin-man-using-laptop-at-home-technology-and-smart-working-concept.jpg?s=1024x1024&w=is&k=20&c=IPtj3EqZe7lDtJu1APOknmDTEJ09GPPxQkaIH9wExlQ=' },

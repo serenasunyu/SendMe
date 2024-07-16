@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, IconButton, TextField, Button, Paper, Container, useTheme } from '@mui/material';
 import { Settings, Upload, Send, WbSunny, NightsStay } from '@mui/icons-material';
-import { Message, File } from '../types';
+import { Message, File } from '../types/types';
 import { MessageItem } from './MessageItem';
-import { generateId } from '../utils/helpers';
-import { fakeMessages } from '../data/fakeData';
-
+import { fetchMessages, sendTextMessage, uploadImage } from '../services/api';
 
 interface ColorMode {
     toggleColorMode: () => void;
@@ -22,29 +20,35 @@ export const SendMe: React.FC<SendMeProps> = ({ colorMode }) => {
   const theme = useTheme();
 
   useEffect(() => {
-    // fetchMessages();
-    setMessages(fakeMessages);
+    fetchMessagesData();
   }, []);
 
-  /*
-  const fetchMessages = async () => {
-    // API call to fetch messages
-    // setMessages(fetchedMessages);
+  const fetchMessagesData = async () => {
+    try {
+      const fetchedMessages = await fetchMessages();
+      setMessages(fetchedMessages);
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+      // Optionally, you can still use fakeMessages as a fallback
+      // setMessages(fakeMessages);
+    }
   };
-  */
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (inputText || files.length > 0) {
-      const newMessage: Message = {
-        id: generateId(),
-        timestamp: new Date(),
-        content: files.length > 0 ? files : inputText,
-        type: files.length > 0 ? 'image' : 'text',
-      };
-      setMessages([newMessage, ...messages]);
-      setInputText('');
-      setFiles([]);
-      // API call to send message
+      try {
+        let newMessage: Message;
+        if (files.length > 0) {
+          newMessage = await uploadImage(files);
+        } else {
+          newMessage = await sendTextMessage(inputText);
+        }
+        setMessages([newMessage, ...messages]);
+        setInputText('');
+        setFiles([]);
+      } catch (error) {
+        console.error('Failed to send message:', error);
+      }
     }
   };
 
@@ -105,15 +109,21 @@ export const SendMe: React.FC<SendMeProps> = ({ colorMode }) => {
                 <Button variant="contained" endIcon={<Send />} onClick={handleSend}>
                     Send
                 </Button>
-
             </Box>
 
+            {files.length > 0 && (
+              <Box mb={2}>
+                <Typography variant="subtitle1">Selected Files:</Typography>
+                {files.map((file, index) => (
+                  <Typography key={index} variant="body2">{file.name}</Typography>
+                ))}
+              </Box>
+            )}
+
             <Box>
-                {messages.map(
-                    (message) => (
-                        <MessageItem key={message.id} message={message} />
-                    )
-                )}
+                {messages.map((message) => (
+                    <MessageItem key={message.id} message={message} />
+                ))}
             </Box>
         </Paper>
     </Container>
