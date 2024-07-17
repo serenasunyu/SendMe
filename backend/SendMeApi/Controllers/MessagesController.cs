@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SendMeApi.Data;
+using SendMeApi.DTOs;
 using SendMeApi.Models;
+using SendMeApi.Services;
 
 namespace SendMeApi.Controllers
 {
@@ -10,77 +12,112 @@ namespace SendMeApi.Controllers
     public class MessagesController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly FileService _fileService;
 
-        public MessagesController(ApplicationDbContext context)
+        public MessagesController(ApplicationDbContext context, FileService fileService)
         {
             _context = context;
+            _fileService = fileService;
         }
 
         // GET: api/Messages
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Message>>> GetMessages()
+        public async Task<ActionResult<IEnumerable<MessageDto>>> GetMessages()
         {
-            return await _context.Messages.OrderByDescending(m => m.Timestamp).ToListAsync();
+            var messages = await _context.Messages
+                .Include(m => m.Files)
+                .OrderByDescending(m => m.Timestamp)
+                .ToListAsync();
+
+            return messages.Select(m => new MessageDto
+            {
+                Id = m.Id,
+                Timestamp = m.Timestamp,
+                Content = m.Content,
+                Type = m.Type,
+                Files = m.Files.Select(f => new FileDto
+                {
+                    Id = f.Id,
+                    Name = f.Name,
+                    Url = f.Url
+                }).ToList()
+            }).ToList();
         }
 
         // GET: api/Messages/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Message>> GetMessage(int id)
+        public async Task<ActionResult<MessageDto>> GetMessage(string id)
         {
-            var message = await _context.Messages.FindAsync(id);
+            var message = await _context.Messages
+                .Include(m => m.Files)
+                .FirstOrDefaultAsync(m => m.Id == id);
 
             if (message == null)
             {
                 return NotFound();
             }
 
-            return message;
+            return new MessageDto
+            {
+                Id = message.Id,
+                Timestamp = message.Timestamp,
+                Content = message.Content,
+                Type = message.Type,
+                Files = message.Files.Select(f => new FileDto
+                {
+                    Id = f.Id,
+                    Name = f.Name,
+                    Url = f.Url
+                }).ToList()
+            };
         }
 
         // POST: api/Messages
         [HttpPost]
-        public async Task<ActionResult<Message>> PostMessage(Message message)
+        public async Task<ActionResult<MessageDto>> PostMessage([FromForm] string content, [FromForm] List<IFormFile> files)
         {
-            message.Timestamp = DateTime.UtcNow;
+            var message = new Message
+            {
+                Content = content,
+                Type = files.Any() ? "mixed" : "text"
+            };
+
+            if (files.Any())
+            {
+                foreach (var file in files)
+                {
+                    var fileUrl = await _fileService.SaveFile(file);
+                    message.Files.Add(new Models.File
+                    {
+                        Name = file.FileName,
+                        Url = fileUrl
+                    });
+                }
+            }
+
             _context.Messages.Add(message);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetMessage), new { id = message.Id }, message);
-        }
-
-        // PUT: api/Messages/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutMessage(int id, Message message)
-        {
-            if (id != message.Id)
+            var messageDto = new MessageDto
             {
-                return BadRequest();
-            }
-
-            _context.Entry(message).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!MessageExists(id))
+                Id = message.Id,
+                Timestamp = message.Timestamp,
+                Content = message.Content,
+                Type = message.Type,
+                Files = message.Files.Select(f => new FileDto
                 {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+                    Id = f.Id,
+                    Name = f.Name,
+                    Url = f.Url
+                }).ToList()
+            };
 
-            return NoContent();
+            return CreatedAtAction(nameof(GetMessage), new { id = message.Id }, messageDto);
         }
 
         // DELETE: api/Messages/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteMessage(int id)
+        public async Task<IActionResult> DeleteMessage(string id)
         {
             var message = await _context.Messages.FindAsync(id);
             if (message == null)
@@ -93,44 +130,5 @@ namespace SendMeApi.Controllers
 
             return NoContent();
         }
-
-        private bool MessageExists(int id)
-        {
-            return _context.Messages.Any(e => e.Id == id);
-        }
-
-        // UPLOAD
-        [HttpPost("upload")]
-        public async Task<ActionResult<Message>> UploadFile([FromForm] IFormFile file)
-        {
-            if (file == null || file.Length == 0)
-                return BadRequest("File is empty");
-
-            var uploadPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-            if (!Directory.Exists(uploadPath))
-                Directory.CreateDirectory(uploadPath);
-
-            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-            var filePath = Path.Combine(uploadPath, fileName);
-
-            using (var stream = new FileStream(filePath, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
-            }
-
-            var message = new Message
-            {
-                Timestamp = DateTime.UtcNow,
-                Content = file.FileName,
-                Type = "image",
-                ImageUrl = $"/uploads/{fileName}"
-            };
-
-            _context.Messages.Add(message);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetMessage), new { id = message.Id }, message);
-        }
     }
 }
-

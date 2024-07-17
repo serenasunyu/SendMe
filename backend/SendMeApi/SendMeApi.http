@@ -1,6 +1,0 @@
-@SendMeApi_HostAddress = http://localhost:5242
-
-GET {{SendMeApi_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

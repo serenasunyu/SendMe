@@ -1,13 +1,11 @@
-using System;
-
 namespace SendMeApi.Models
 {
     public class Message
     {
-        public int Id { get; set; }
-        public DateTime Timestamp { get; set; }
-        public string? Content { get; set; }
-        public string? Type { get; set; } // "text" or "image"
-        public string? ImageUrl { get; set; } // Nullable, for image messages
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public string Content { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public List<File> Files { get; set; } = new List<File>();
     }
 }
