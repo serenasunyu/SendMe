@@ -1,53 +1,18 @@
-import { Message, File } from "../types/types";
+import axios from 'axios';
+import { Message } from '../types';
 
-const API_URL = 'http://localhost:5242';
+const API_URL = "http://localhost:5242/api";
 
 export const fetchMessages = async (): Promise<Message[]> => {
-  const response = await fetch(`${API_URL}/messages`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch messages');
-  }
-  const messages: Message[] = await response.json();
-  return messages.map(message => ({
-    ...message,
-    timestamp: new Date(message.timestamp)
-  }));
+  const response = await axios.get<Message[]>(`${API_URL}/messages`);
+  return response.data;
 };
 
-export const sendTextMessage = async (content: string): Promise<Message> => {
-  const response = await fetch(`${API_URL}/messages`, {
-    method: 'POST',
+export const sendMessage = async (formData: FormData): Promise<Message> => {
+  const response = await axios.post<Message>(`${API_URL}/messages`, formData, {
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'multipart/form-data',
     },
-    body: JSON.stringify({ content, type: 'text' }),
   });
-  if (!response.ok) {
-    throw new Error('Failed to send message');
-  }
-  const message: Message = await response.json();
-  return {
-    ...message,
-    timestamp: new Date(message.timestamp)
-  };
-};
-
-export const uploadImage = async (files: File[]): Promise<Message> => {
-  const formData = new FormData();
-  files.forEach((file, index) => {
-    formData.append(`file${index}`, file.url);
-  });
-
-  const response = await fetch(`${API_URL}/messages/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!response.ok) {
-    throw new Error('Failed to upload image');
-  }
-  const message: Message = await response.json();
-  return {
-    ...message,
-    timestamp: new Date(message.timestamp)
-  };
+  return response.data;
 };

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, PaletteMode } from '@mui/material';
-import { SendMe } from './components/SendMe';
+import  SendMe  from './components/SendMe';
 
 
 const App: React.FC = () => {
@@ -11,8 +11,9 @@ const App: React.FC = () => {
       toggleColorMode: () => {
         setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
       },
+      mode,
     }),
-    [],
+    [mode],
   );
 
   const theme = useMemo(
