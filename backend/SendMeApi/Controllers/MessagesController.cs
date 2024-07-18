@@ -4,9 +4,14 @@ using SendMeApi.Data;
 using SendMeApi.DTOs;
 using SendMeApi.Models;
 using SendMeApi.Services;
+using SendMeApi.Exceptions; 
+using Microsoft.AspNetCore.Cors;
+using System.IO;
+
 
 namespace SendMeApi.Controllers
 {
+    [EnableCors("AllowReactApp")]
     [Route("api/[controller]")]
     [ApiController]
     public class MessagesController : ControllerBase
@@ -14,10 +19,13 @@ namespace SendMeApi.Controllers
         private readonly ApplicationDbContext _context;
         private readonly FileService _fileService;
 
-        public MessagesController(ApplicationDbContext context, FileService fileService)
+        private readonly IWebHostEnvironment _webHostEnvironment;
+
+        public MessagesController(ApplicationDbContext context, FileService fileService, IWebHostEnvironment webHostEnvironment)
         {
             _context = context;
             _fileService = fileService;
+            _webHostEnvironment = webHostEnvironment;
         }
 
         // GET: api/Messages
@@ -74,12 +82,20 @@ namespace SendMeApi.Controllers
 
         // POST: api/Messages
         [HttpPost]
-        public async Task<ActionResult<MessageDto>> PostMessage([FromForm] string content, [FromForm] List<IFormFile> files)
+        public async Task<ActionResult<MessageDto>> PostMessage([FromForm] string? content, [FromForm] List<IFormFile> files)
         {
+            if (string.IsNullOrWhiteSpace(content) && !files.Any())
+            {
+                throw new BadRequestException("A message must contain either text or at least one image.");
+            }
+
             var message = new Message
             {
-                Content = content,
-                Type = files.Any() ? "mixed" : "text"
+                Id = Guid.NewGuid().ToString(),
+                Timestamp = DateTime.UtcNow,
+                Content = content ?? "",
+                Type = DetermineMessageType(content, files),
+                Files = new List<Models.File>()
             };
 
             if (files.Any())
@@ -89,8 +105,10 @@ namespace SendMeApi.Controllers
                     var fileUrl = await _fileService.SaveFile(file);
                     message.Files.Add(new Models.File
                     {
+                        Id = Guid.NewGuid().ToString(),
                         Name = file.FileName,
-                        Url = fileUrl
+                        Url = fileUrl,
+                        MessageId = message.Id
                     });
                 }
             }
@@ -104,15 +122,35 @@ namespace SendMeApi.Controllers
                 Timestamp = message.Timestamp,
                 Content = message.Content,
                 Type = message.Type,
-                Files = message.Files.Select(f => new FileDto
+                Files = message.Files?.Select(f => new FileDto
                 {
                     Id = f.Id,
                     Name = f.Name,
                     Url = f.Url
-                }).ToList()
+                }).ToList() ?? new List<FileDto>()
             };
 
             return CreatedAtAction(nameof(GetMessage), new { id = message.Id }, messageDto);
+        }
+
+        private string DetermineMessageType(string? content, List<IFormFile> files)
+        {
+            if (!string.IsNullOrWhiteSpace(content) && files.Any())
+            {
+                return "mixed";
+            }
+            else if (!string.IsNullOrWhiteSpace(content))
+            {
+                return "text";
+            }
+            else if (files.Any())
+            {
+                return "image";
+            }
+            else
+            {
+                throw new BadRequestException("A message must contain either text or at least one image.");
+            }
         }
 
         // DELETE: api/Messages/5
@@ -129,6 +167,59 @@ namespace SendMeApi.Controllers
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        [HttpGet("download/{fileId}")]
+        public async Task<IActionResult> DownloadFile(string fileId)
+        {
+            var file = await _context.Files.FirstOrDefaultAsync(f => f.Id == fileId);
+            if (file == null)
+            {
+                return NotFound();
+            }
+
+            // Remove the leading slash if it exists
+            var fileName = file.Url.TrimStart('/');
+            var filePath = Path.Combine(_webHostEnvironment.WebRootPath, fileName);
+
+            if (!System.IO.File.Exists(filePath))
+            {
+                return NotFound();
+            }
+
+            var memory = new MemoryStream();
+            using (var stream = new FileStream(filePath, FileMode.Open))
+            {
+                await stream.CopyToAsync(memory);
+            }
+            memory.Position = 0;
+
+            return File(memory, GetContentType(filePath), file.Name);
+        }
+
+        private string GetContentType(string path)
+        {
+            var types = GetMimeTypes();
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            return types.ContainsKey(ext) ? types[ext] : "application/octet-stream";
+        }
+
+        private Dictionary<string, string> GetMimeTypes()
+        {
+            return new Dictionary<string, string>
+            {
+                {".txt", "text/plain"},
+                {".pdf", "application/pdf"},
+                {".doc", "application/vnd.ms-word"},
+                {".docx", "application/vnd.ms-word"},
+                {".xls", "application/vnd.ms-excel"},
+                {".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+                {".png", "image/png"},
+                {".jpg", "image/jpeg"},
+                {".jpeg", "image/jpeg"},
+                {".gif", "image/gif"},
+                {".csv", "text/csv"}
+            };
         }
     }
 }

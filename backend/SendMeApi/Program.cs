@@ -20,7 +20,9 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowReactApp",
         builder => builder.WithOrigins("http://localhost:5173")
                           .AllowAnyMethod()
-                          .AllowAnyHeader());
+                          .AllowAnyHeader()
+                          .AllowCredentials()
+                          .WithExposedHeaders("Content-Disposition"));
 });
 
 var app = builder.Build();
